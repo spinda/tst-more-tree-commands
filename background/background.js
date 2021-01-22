@@ -291,6 +291,11 @@ browser.commands.onCommand.addListener(async command => {
     case 'toggle':
       await toggle(miltiselectedTabs);
       return;
+    case 'newFirstChildTab':
+      if (miltiselectedTabs.length === 1) {
+        await newFirstChildTab(activeTab);
+      }
+      return;
   }
 });
 
@@ -313,11 +318,15 @@ async function getTreeItems(tabs) {
   });
 }
 
-async function getRelatedTreeItem(tab, relation) {
+async function getTreeItem(tab) {
   return browser.runtime.sendMessage(TST_ID, {
     type: 'get-tree',
-    tab: `${relation}-of-${tab.id}`
+    tab:  tab.id
   });
+}
+
+async function getRelatedTreeItem(tab, relation) {
+  return getTreeItem({ id: `${relation}-of-${tab.id}` });
 }
 
 function collectRootItems(tabs) {
@@ -326,8 +335,8 @@ function collectRootItems(tabs) {
   return tabs.filter(tab => new Set([...tab.ancestorTabIds, ...allIds]).size == tab.ancestorTabIds.length + allIds.length);
 }
 
-function collectDescendantItems(treeItems) {
-  const descendantItems = [...treeItems];
+function collectDescendantItems(treeItem) {
+  const descendantItems = [treeItem];
   let currentIndex = 0;
   while (currentIndex < descendantItems.length) {
     const currentItem = descendantItems[currentIndex++];
@@ -461,6 +470,25 @@ async function toggle(tabs) {
   })));
 }
 
+async function newFirstChildTab(parentTab, params = {}) {
+  const parentItem = await getTreeItem(parentTab);
+  if (parentItem == null) {
+    return;
+  }
+
+  const tab = await browser.tabs.create({
+    ...params,
+    openerTabId: parentItem.id
+  });
+
+  // Wait for the created tab to fully register.
+  await browser.tabs.get(tab.id);
+
+  if (parentItem.children.length > 0) {
+    await moveBefore(tab, parentItem.children[0]);
+  }
+}
+
 async function moveBefore(tab, referenceTab) {
   await browser.runtime.sendMessage(TST_ID, {
     type:           'move-before',
@@ -516,8 +544,8 @@ async function moveAfterNextSibling(tab) {
   } else {
     // If there's no tab following the tab's next sibling's last descendant, then
     // we can do a move-to-end to get what we want.
-    const treeItems = await getTreeItems([tab]);
-    await moveToEnd(collectDescendantItems(treeItems));
+    const treeItem = await getTreeItem(tab);
+    await moveToEnd(collectDescendantItems(treeItem));
   }
 
   // Doing a move-before moves the tab to the indentation level of the reference

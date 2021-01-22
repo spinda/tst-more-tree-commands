@@ -36,6 +36,9 @@
     },
     "toggle": {
       "description": "__MSG_command_toggle__"
+    },
+    "newFirstChildTab": {
+      "description": "__MSG_command_newFirstChildTab__"
     }
   },
   "options_ui": {
